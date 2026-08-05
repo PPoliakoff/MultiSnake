@@ -1,4 +1,5 @@
 import pygame
+import sys
 from websockets.sync.client import connect
 
 quit=False
@@ -17,7 +18,7 @@ playerColor=5 # undefined color
 screen = pygame.display.set_mode((WINDOWSIZE, WINDOWSIZE))
 
 #connect to server
-uri = "ws://localhost:8765"
+uri = "ws://"+sys.argv[1]+":8765" #"ws://192.168.0.22:8765"
 with connect(uri) as websocket:
     while not quit:
         msg=""
