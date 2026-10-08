@@ -59,7 +59,7 @@ class Client:
         if sx<0 or sy<0 or sx>=GRIDSIZE or sy >=GRIDSIZE or self.grid==None:
             retval= WALL
         else:
-            retval=self.grid[sx+sy*GRIDSIZE]
+            retval=ord(self.grid[sx+sy*GRIDSIZE])-48
         return retval
 
     def turnRight(self):
@@ -83,61 +83,61 @@ class Client:
         uri=f"ws://{sys.argv[1]}:8765"
         pygame.init()
         pygame.font.init()
-        font=pygame.font.SysFont("Courier",25)
+        font=pygame.font.SysFont("Courier",30,bold=True)
         screen=pygame.display.set_mode((WINDOWSIZE,WINDOWSIZE)) 
         try:
             with connect(uri) as websocket:
                 self.websocket=websocket
                 websocket.send(f"L{sys.argv[2]}")
                 quit=False
-                key=pygame.K_UNKNOWN
-
+                state='N'
                 while not quit:
+                    key=pygame.K_UNKNOWN
+
                     for e in pygame.event.get():
                         if e.type == pygame.QUIT:
                             quit = True
                         elif e.type==pygame.KEYDOWN:
                             key=e.key
-                    data="W"
+                    if state=='G' and key!=pygame.K_UNKNOWN:
+                        self.play(key)
                     try:                        
                         data=websocket.recv(timeout=0.1).split('|')
+                        state=data[0]
+                        localMessage=None
+                        self.grid=None
+                        if state=='N': # Not logged in
+                            raise RuntimeError("Server refused login")
+                        elif state=='L': # Lobby
+                            localMessage="You are in the lobby Press X to Play"
+                            if key==pygame.K_x or self.autoStart:
+                                websocket.send("R") #notify we are Ready
+                        elif state=='R': # Ready
+                            localMessage="Waiting for Players"
+                        elif state=='O': # Game Over
+                            self.grid=data[2]
+                            localMessage=data[3]
+                        elif state=="G": #we are in game
+                            self.grid=data[2]
+                            self.setInfo(data[3])
+                            self.play(key)
+                        else:
+                            state="W"
+                        # update the display
+                        if state!="W":
+                            screen.fill(COLORS[int(data[1])+1])
+                            if state=="G" or state=="O":
+                                for y in range(GRIDSIZE):
+                                    for x in range(GRIDSIZE):
+                                        pygame.draw.rect(screen,COLORS[ord(self.grid[x+y*GRIDSIZE])-48],
+                                                        (DRAWOFFSET+x*SQUARESIZE,DRAWOFFSET+y*SQUARESIZE,SQUARESIZE,SQUARESIZE))
+                            if localMessage!=None:
+                                text = font.render(localMessage, True,(255,255,255))
+                                test_rect=text.get_rect(center=(WINDOWSIZE//2,140))
+                                screen.blit(text, test_rect)
+                            pygame.display.flip()
                     except TimeoutError as e:
                         pass
-                    state=data[0]
-                    localMessage=None
-                    self.grid=None
-                    if state=='N': # Not logged in
-                        raise RuntimeError("Server refused login")
-                    elif state=='L': # Lobby
-                        localMessage="You are in the lobby Press X to Play"
-                        if key==pygame.K_x or self.autoStart:
-                            websocket.send("R") #notify we are Ready
-                    elif state=='R': # Ready
-                        localMessage="Waiting for Players"
-                    elif state=='O': # Game Over
-                        self.grid=data[2]
-                        localMessage=data[3]
-                    elif state=="G": #we are in game
-                        self.grid=data[2]
-                        self.setInfo(data[3])
-                        self.play(key)
-                        key=pygame.K_UNKNOWN
-                    else:
-                        state="W"
-                    # update the display
-                    if state!="W":
-                        screen.fill(COLORS[int(data[1])+1])
-                        if state=="G" or state=="O":
-                            for y in range(GRIDSIZE):
-                                for x in range(GRIDSIZE):
-                                    pygame.draw.rect(screen,COLORS[ord(self.grid[x+y*GRIDSIZE])-48],
-                                                    (DRAWOFFSET+x*SQUARESIZE,DRAWOFFSET+y*SQUARESIZE,SQUARESIZE,SQUARESIZE))
-                        if localMessage!=None:
-                            text = font.render(localMessage, True,(255,255,255))
-                            test_rect=text.get_rect(center=(WINDOWSIZE//2,80))
-                            screen.blit(text, test_rect)
-                        pygame.display.flip()
-
         except OSError:
             print(f"Unable to connect to {sys.argv[1]}")
         except websockets.ConnectionClosed as e:
